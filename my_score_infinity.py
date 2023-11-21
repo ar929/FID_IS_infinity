@@ -13,7 +13,11 @@ import glob
 from tqdm import tqdm
 from PIL import Image
 from scipy import linalg 
-from inception import * 
+try:
+    from inception import *
+except ModuleNotFoundError:
+    from FID_IS_infinity.inception import * # Fixed this from `from inception import *`
+
 
 class randn_sampler():
     """
@@ -429,6 +433,63 @@ def numpy_calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
 
     return (diff.dot(diff) + np.trace(sigma1) +
             np.trace(sigma2) - 2 * tr_covmean)
+
+# My new functions::
+def calculate_FID_infinity_array(real_path, fake_path, batch_size=50, min_fake=5000, num_points=15):
+    """
+    Calculates effectively unbiased FID_inf using extrapolation given 
+    arrays of real & synthetic data
+    Args:
+        real_array: (str)
+            Path to real dataset or precomputed .npz statistics.
+        fake_array: (str)
+            Path to fake dataset.
+        batch_size: (int)
+            The batch size for dataloader.
+            Default: 50
+        min_fake: (int)
+            Minimum number of images to evaluate FID on.
+            Default: 5000
+        num_points: (int)
+            Number of FID_N we evaluate to fit a line.
+            Default: 15
+    """
+    # load pretrained inception model 
+    inception_model = load_inception_net()
+
+    # get all activations of generated images
+    if real_path.endswith('.npz'):
+        real_m, real_s = load_path_statistics(real_path)
+    else:
+        real_act, _ = compute_path_statistics(real_path, batch_size, model=inception_model)
+        real_m, real_s = np.mean(real_act, axis=0), np.cov(real_act, rowvar=False)
+
+    fake_act, _ = compute_path_statistics(fake_path, batch_size, model=inception_model)
+
+    num_fake = len(fake_act)
+    assert num_fake > min_fake, \
+        'number of fake data must be greater than the minimum point for extrapolation'
+
+    fids = []
+
+    # Choose the number of images to evaluate FID_N at regular intervals over N
+    fid_batches = np.linspace(min_fake, num_fake, num_points).astype('int32')
+
+    # Evaluate FID_N
+    for fid_batch_size in fid_batches:
+        # sample with replacement
+        np.random.shuffle(fake_act)
+        fid_activations = fake_act[:fid_batch_size]
+        m, s = np.mean(fid_activations, axis=0), np.cov(fid_activations, rowvar=False)
+        FID = numpy_calculate_frechet_distance(m, s, real_m, real_s)
+        fids.append(FID)
+    fids = np.array(fids).reshape(-1, 1)
+    
+    # Fit linear regression
+    reg = LinearRegression().fit(1/fid_batches.reshape(-1, 1), fids)
+    fid_infinity = reg.predict(np.array([[0]]))[0,0]
+
+    return fid_infinity
 
 
 if __name__ == '__main__':
