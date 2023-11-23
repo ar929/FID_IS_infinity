@@ -68,8 +68,7 @@ class WrapInception(nn.Module):
 def load_inception_net(parallel=False):
     inception_model = inception_v3(pretrained=True, transform_input=False)
     #inception_model = WrapInception(inception_model.eval()).cuda()
-    inception_model = WrapInception(inception_model.eval()).cuda()
+    inception_model = WrapInception(inception_model.eval()).to(torch.device("mps"))
     if parallel:
         inception_model = nn.DataParallel(inception_model)
     return inception_model
-
