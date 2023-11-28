@@ -282,7 +282,6 @@ def calculate_FID(model, act, gt_npz):
     return FID
 
 
-
 def numpy_calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     """Numpy implementation of the Frechet Distance.
     The Frechet distance between two multivariate Gaussians X_1 ~ N(mu_1, C_1)
@@ -315,8 +314,10 @@ def numpy_calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
 
     diff = mu1 - mu2
 
-    # Product might be almost singular
-    covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+    # Product might be almost singular 
+    # covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+    # Trying fix from here: https://github.com/lucidrains/denoising-diffusion-pytorch/issues/213
+    covmean = linalg.fractional_matrix_power(sigma1.dot(sigma2), 0.5)
     if not np.isfinite(covmean).all():
         msg = ('fid calculation produces singular product; '
                'adding %s to diagonal of cov estimates') % eps
